@@ -1,47 +1,67 @@
-name: ReleaseOrVersionPR
+name: Release
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
+permissions: {}
 jobs:
   release:
-    # Basic security: the release job can only be executed from this repo and from the main branch (not a remote thing)
-    if: ${{ github.repository == 'udecode/plate' && contains('refs/heads/main',github.ref)}}
-    name: Release and changelog
+    permissions:
+      contents: write # to create release (changesets/action)
+      pull-requests: write # to create pull request (changesets/action)
+
+    name: ${{ matrix.channel }}
     runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        channel:
+          - latest
+          - dev
+
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v2
         with:
-          # To run comparison we need more than the latest commit.
-          # @link https://github.com/actions/checkout#fetch-all-history-for-all-tags-and-branches
           fetch-depth: 0
 
-      - name: ♻️ Use Node.js 18.x
-        uses: actions/setup-node@v4
+      - name: Setup node
+        uses: actions/setup-node@v2
         with:
-          node-version: 18.18.x
+          node-version: 20.x
+          cache: yarn
+          registry-url: https://registry.npmjs.org
+          key: node20
 
-      - name: 📥 Monorepo install
-        uses: ./.github/actions/yarn-nm-install
+      - name: Install dependencies
+        run: yarn
 
-      # @link https://github.com/changesets/action
-      - name: 🦋 Create Release Pull Request or Publish to npm
-        id: changesets
+      - name: Prepare release
+        run: yarn prerelease
+
+      # https://github.com/changesets/action
+      - name: Create release pull request or Publish to npm
+        if: matrix.channel == 'latest'
         uses: changesets/action@v1
         with:
-          # publish: yarn g:release
-          cwd: ${{ github.workspace }}
-          title: '[Release] Version packages'
-          publish: yarn release
-          # Optional, might be used in conjunction with GITHUB_TOKEN to
-          # allow running the workflows on a Version package action.
-          # Be aware of security implications.
-          # setupGitUser: true
+          # defined in package.json#scripts
+          version: yarn changesetversion
+          publish: yarn changeset publish
         env:
-          # See https://github.com/changesets/action/issues/147
-          HOME: ${{ github.workspace }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          YARN_ENABLE_IMMUTABLE_INSTALLS: false
+
+      # https://github.com/atlassian/changesets/blob/master/docs/snapshot-releases.md
+      - name: Release to @dev channel
+        if: matrix.channel == 'dev'
+        run: |
+          yarn changeset version --snapshot
+          yarn changeset publish --tag dev
+        env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

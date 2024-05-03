@@ -1,8 +1,9 @@
 {
-  "extends": "../../config/tsconfig.build.json",
+  "extends": "../../config/typescript/tsconfig.json",
+  "include": ["src/**/*"],
   "compilerOptions": {
-    "declarationDir": "./dist",
-    "outDir": "./dist"
+    "rootDir": "./src",
+    "outDir": "./lib"
   },
-  "include": ["src"]
+  "references": [{ "path": "../slate" }]
 }
